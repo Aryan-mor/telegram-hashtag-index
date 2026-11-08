@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -197,8 +198,11 @@ func Classify(m tg.MessageClass) (store.Check, error) {
 		}
 		c := store.Check{Kind: "document", Size: doc.Size, Mime: doc.MimeType}
 		var video, animated bool
+		var name string
 		for _, a := range doc.Attributes {
 			switch a := a.(type) {
+			case *tg.DocumentAttributeFilename:
+				name = a.FileName
 			case *tg.DocumentAttributeVideo:
 				video = true
 				c.Duration = int64(a.Duration)
@@ -221,9 +225,42 @@ func Classify(m tg.MessageClass) (store.Check, error) {
 			c.Kind = "animation"
 		case video:
 			c.Kind = "video"
+		case c.Kind == "document":
+			// A video sent as a file has no video attribute. Its type and name still say what it is.
+			c.Kind = kindOfFile(doc.MimeType, name)
 		}
 		return c, nil
 	default:
 		return store.Check{Kind: "other"}, nil
 	}
+}
+
+var (
+	videoExt = map[string]bool{
+		".mkv": true, ".mp4": true, ".m4v": true, ".avi": true, ".mov": true, ".webm": true, ".ts": true,
+		".m2ts": true, ".mpg": true, ".mpeg": true, ".wmv": true, ".flv": true, ".3gp": true,
+	}
+	audioExt = map[string]bool{
+		".mp3": true, ".flac": true, ".m4a": true, ".aac": true, ".ogg": true, ".opus": true,
+		".wav": true, ".wma": true, ".alac": true,
+	}
+)
+
+// kindOfFile is the kind of a plain file post, from its MIME type and then its name.
+func kindOfFile(mime, name string) string {
+	mime = strings.ToLower(mime)
+	switch {
+	case strings.HasPrefix(mime, "video/") || mime == "application/x-matroska":
+		return "video"
+	case strings.HasPrefix(mime, "audio/"):
+		return "audio"
+	}
+	ext := strings.ToLower(path.Ext(name))
+	switch {
+	case videoExt[ext]:
+		return "video"
+	case audioExt[ext]:
+		return "audio"
+	}
+	return "document"
 }

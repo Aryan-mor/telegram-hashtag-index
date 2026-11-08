@@ -125,7 +125,7 @@ func (s *Service) Handle(ctx context.Context, from From, text string) string {
 			return "not allowed to search"
 		}
 		return s.query(ctx, from, rest)
-	case "/del", "/allow", "/deny", "/purge", "/stats":
+	case "/del", "/allow", "/deny", "/purge", "/stats", "/recheck":
 		if !admin {
 			return ""
 		}
@@ -326,6 +326,15 @@ func (s *Service) admin(ctx context.Context, cmd, args string) string {
 			return "error: try again later"
 		}
 		return fmt.Sprintf("verified %d, pending %d, dead %d", c[store.StatusVerified], c[store.StatusPending], c[store.StatusDead])
+	case "/recheck":
+		if len(f) != 1 || !store.ValidKind(strings.ToLower(f[0])) {
+			return "usage: /recheck <kind>"
+		}
+		n, err := s.st.Recheck(ctx, strings.ToLower(f[0]))
+		if err != nil {
+			return "error: try again later"
+		}
+		return fmt.Sprintf("%d links queued for a new check", n)
 	case "/del":
 		if len(f) != 2 {
 			return "usage: /del #tag link"

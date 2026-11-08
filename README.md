@@ -35,7 +35,7 @@ Only public post links are accepted: `https://t.me/<channel>/<id>`. Private link
 ### Admin commands
 
 `/allow <id> write|read|both`, `/deny <id>`, `/purge <id>` (removes the member and all links they
-added), `/del #tag link`, `/stats`. Admins are the ids in `ADMIN_IDS`.
+added), `/del #tag link`, `/recheck <kind>` (queue verified links of that kind for a new check), `/stats`. Admins are the ids in `ADMIN_IDS`.
 
 ## Rules for members
 

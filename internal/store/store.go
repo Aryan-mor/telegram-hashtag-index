@@ -340,3 +340,14 @@ func (s *Store) Counts(ctx context.Context) (map[string]int64, error) {
 	}
 	return out, rows.Err()
 }
+
+// Recheck puts verified links of one kind back in the queue, so the verifier looks at them
+// again. It returns how many were queued.
+func (s *Store) Recheck(ctx context.Context, kind string) (int64, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE links SET status='pending', tries=0, checked_at=0 WHERE status='verified' AND kind=?`, kind)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}

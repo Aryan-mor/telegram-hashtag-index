@@ -374,3 +374,26 @@ func TestCreateFlow(t *testing.T) {
 		t.Errorf("flow did not expire: %q", got)
 	}
 }
+
+func TestRecheck(t *testing.T) {
+	r := newRig(t, func(c *Config) { c.Open = true })
+	r.say(nobody, true, "/create #tm_m_603 https://t.me/chan1/1")
+	r.verify("document")
+	if got := r.say(nobody, false, "/recheck document"); got != "" {
+		t.Errorf("a stranger ran /recheck: %q", got)
+	}
+	if got := r.say(admin, false, "/recheck nonsense"); !strings.HasPrefix(got, "usage") {
+		t.Errorf("bad kind: %q", got)
+	}
+	if got := r.say(admin, false, "/recheck document"); got != "1 links queued for a new check" {
+		t.Fatalf("recheck: %q", got)
+	}
+	if got := r.say(admin, false, "/stats"); got != "verified 0, pending 1, dead 0" {
+		t.Errorf("stats after recheck: %q", got)
+	}
+	// The kind is looked at again and can change.
+	r.verify("video")
+	if got := r.say(nobody, true, "/q #tm_m_603 kind:video"); !strings.HasPrefix(got, "https://t.me/chan1/1 video") {
+		t.Errorf("after the new check: %q", got)
+	}
+}
