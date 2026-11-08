@@ -37,6 +37,8 @@ func main() {
 	switch cmd {
 	case "login":
 		err = login(ctx)
+	case "say":
+		err = say(ctx)
 	case "serve":
 		err = serve(ctx, log)
 	default:
@@ -46,6 +48,19 @@ func main() {
 		log.Error("stopped", "err", err)
 		os.Exit(1)
 	}
+}
+
+// say sends the arguments, after the bot name, to that bot from the verifier account and prints
+// the answers. Stop the service first so two programs do not share one login.
+func say(ctx context.Context) error {
+	if len(os.Args) < 4 {
+		return errors.New("usage: say <botusername> <text>...")
+	}
+	id, hash, err := telegramKeys()
+	if err != nil {
+		return err
+	}
+	return userauth.Say(ctx, id, hash, dataDir(), os.Args[2], os.Args[3:], os.Stdout)
 }
 
 func dataDir() string { return env("DATA_DIR", "data") }
