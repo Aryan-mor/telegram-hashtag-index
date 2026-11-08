@@ -3,7 +3,7 @@
 #
 #   ssh -t YOUR_SERVER "curl -fsSL https://raw.githubusercontent.com/Aryan-mor/telegram-hashtag-index/main/deploy/install.sh | bash"
 #
-# The first run asks for the settings one by one, builds the image, signs the verifier's
+# The first run asks for the settings one by one, pulls the image, signs the verifier's
 # Telegram account in and starts the bot. Run it again later to update.
 set -euo pipefail
 
@@ -48,7 +48,8 @@ fi
 
 mkdir -p data
 chown 10001:10001 data
-docker compose build
+# The image is built by GitHub Actions. Building here could starve a small shared server of memory.
+docker compose pull || { echo "could not pull the image; check that the GitHub Actions build passed" >&2; exit 1; }
 
 if [ ! -f data/user.session ]; then
   echo

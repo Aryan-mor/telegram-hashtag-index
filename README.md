@@ -60,7 +60,7 @@ from <https://my.telegram.org> and a Telegram user account for the verifier.
 
 ```sh
 cp .env.example .env        # fill it in
-docker compose build
+docker compose pull
 docker compose run --rm index login    # once: phone number, code, 2FA password
 docker compose up -d
 ```
