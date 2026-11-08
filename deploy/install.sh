@@ -49,7 +49,7 @@ fi
 mkdir -p data
 chown 10001:10001 data
 # The image is built by GitHub Actions. Building here could starve a small shared server of memory.
-docker compose pull || { echo "could not pull the image; check that the GitHub Actions build passed" >&2; exit 1; }
+DOCKER_CONFIG="$(mktemp -d)" docker compose pull || { echo "could not pull the image; check that the GitHub Actions build passed" >&2; exit 1; }
 
 if [ ! -f data/user.session ]; then
   echo
