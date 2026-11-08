@@ -75,3 +75,24 @@ Without a session the bot still works and links stay pending until you run `logi
 ```sh
 go test ./...
 ```
+
+## Deploy with GitHub Actions
+
+`.github/workflows/ci.yml` runs vet and the tests on every push and pull request. A push to
+`main` also builds the image and publishes it to `ghcr.io/aryan-mor/telegram-hashtag-index`.
+
+The deploy job is off until you set the repository variable `DEPLOY` to `true`. It then copies
+`docker-compose.yml` to the server, pulls the new image and restarts the container. It reaches
+the server by SSH through a Cloudflare Access tunnel, so no port has to be opened.
+
+One time on the server:
+
+1. Create the folder, for example `/srv/hashtag-index`, and put the filled `.env` in it.
+2. Run `docker compose run --rm index login` there once to sign the verifier account in.
+3. Add the public half of a new SSH key to the deploy user's `authorized_keys`.
+
+Repository secrets: `DEPLOY_HOST` (the Cloudflare Access SSH host name), `DEPLOY_USER`,
+`DEPLOY_SSH_KEY` (private key), `DEPLOY_KNOWN_HOSTS` (the server's host key line, from
+`ssh-keyscan`), `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` (a Cloudflare Access service
+token that the SSH application's policy allows). Optional variable `DEPLOY_DIR` changes the
+folder.

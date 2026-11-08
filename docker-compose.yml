@@ -1,5 +1,6 @@
 services:
   index:
+    image: ghcr.io/aryan-mor/telegram-hashtag-index:latest
     build: .
     restart: unless-stopped
     env_file: .env
