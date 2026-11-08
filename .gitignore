@@ -1,0 +1,6 @@
+.env
+data/
+*.db
+*.session
+/hashtag-index
+/hashtag-index.exe
