@@ -96,3 +96,15 @@ Repository secrets: `DEPLOY_HOST` (the Cloudflare Access SSH host name), `DEPLOY
 `ssh-keyscan`), `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` (a Cloudflare Access service
 token that the SSH application's policy allows). Optional variable `DEPLOY_DIR` changes the
 folder.
+
+## Simple install on a server
+
+On a server with Docker and git, one command asks for the settings one by one, builds the
+image, signs the verifier account in and starts the bot:
+
+```sh
+ssh -t YOUR_SERVER "curl -fsSL https://raw.githubusercontent.com/Aryan-mor/telegram-hashtag-index/main/deploy/install.sh | bash"
+```
+
+Run the same command again to update. The files live in `/srv/hashtag-index` (change it with
+`INSTALL_DIR`).

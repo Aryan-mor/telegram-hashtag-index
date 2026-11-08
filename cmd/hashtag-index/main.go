@@ -88,6 +88,8 @@ func serve(ctx context.Context, log *slog.Logger) error {
 
 	svc := service.New(service.Config{
 		Admins:        admins,
+		Open:          os.Getenv("OPEN") != "false",
+		MaxPending:    envInt("MAX_PENDING", 5000),
 		MaxPerTag:     envInt("MAX_PER_TAG", 100),
 		ItemsPerMin:   envInt("ITEMS_PER_MIN", 30),
 		QueriesPerMin: envInt("QUERIES_PER_MIN", 30),

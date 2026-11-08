@@ -39,6 +39,8 @@ func ValidKind(k string) bool {
 const (
 	RoleWrite = 1
 	RoleRead  = 2
+	// RoleBanned silences a sender whatever the other bits say.
+	RoleBanned = 4
 )
 
 // Link is one stored post.
@@ -68,6 +70,8 @@ const (
 	Added AddResult = iota
 	Duplicate
 	Full
+	// Busy means too many links wait for a check.
+	Busy
 )
 
 // Check is what the verifier learned about a post.
@@ -139,8 +143,9 @@ func Open(path string) (*Store, error) {
 // Close closes the database.
 func (s *Store) Close() error { return s.db.Close() }
 
-// Add stores a pending link. A tag holds at most maxPerTag links.
-func (s *Store) Add(ctx context.Context, t string, ref link.Ref, by int64, maxPerTag int, now time.Time) (AddResult, error) {
+// Add stores a pending link. A tag holds at most maxPerTag links, and at most maxPending
+// links may wait for a check at once (zero means no limit).
+func (s *Store) Add(ctx context.Context, t string, ref link.Ref, by int64, maxPerTag, maxPending int, now time.Time) (AddResult, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -161,6 +166,15 @@ func (s *Store) Add(ctx context.Context, t string, ref link.Ref, by int64, maxPe
 	}
 	if n >= maxPerTag {
 		return Full, nil
+	}
+	if maxPending > 0 {
+		var p int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM links WHERE status='pending'`).Scan(&p); err != nil {
+			return 0, err
+		}
+		if p >= maxPending {
+			return Busy, nil
+		}
 	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO links(tag, chan, msg, added_by, added_at) VALUES(?,?,?,?,?)`,

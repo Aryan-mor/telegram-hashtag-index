@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Aryan-mor/telegram-hashtag-index/internal/link"
@@ -18,8 +19,13 @@ import (
 type Config struct {
 	// Admins may do everything. They are set by the operator, not by a command.
 	Admins map[int64]bool
+	// Open lets any sender who is not banned add and search. When false only members
+	// (set with /allow) and admins get answers.
+	Open bool
 	// MaxPerTag is the most links one tag can hold.
 	MaxPerTag int
+	// MaxPending is how many links may wait for a check at once. Zero means no limit.
+	MaxPending int
 	// ItemsPerMin is how many links one sender may submit per minute.
 	ItemsPerMin int
 	// QueriesPerMin is how many searches one sender may run per minute.
@@ -41,6 +47,9 @@ type Service struct {
 	cfg Config
 	st  *store.Store
 	lim *limiter
+
+	mu    sync.Mutex
+	convs map[int64]*conv
 }
 
 // New builds a Service.
@@ -54,15 +63,15 @@ func New(cfg Config, st *store.Store) *Service {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
-	return &Service{cfg: cfg, st: st, lim: newLimiter()}
+	return &Service{cfg: cfg, st: st, lim: newLimiter(), convs: map[int64]*conv{}}
 }
 
 // maxReply keeps a reply under Telegram's 4096 character limit.
 const maxReply = 3800
 
-// Handle answers one message. An empty reply means stay silent. Senders that are not
-// members always get silence, so nobody can probe the bot and two bots cannot start a
-// conversation with it.
+// Handle answers one message. An empty reply means stay silent. Plain text is answered only
+// to a sender who is in the guided /create flow. Every other reply needs a command or a
+// hashtag, which keeps two bots from starting a conversation with each other.
 func (s *Service) Handle(ctx context.Context, from From, text string) string {
 	role, err := s.role(ctx, from.ID)
 	if err != nil {
@@ -75,12 +84,14 @@ func (s *Service) Handle(ctx context.Context, from From, text string) string {
 	if text == "" {
 		return ""
 	}
+	if reply, ok := s.continueConv(ctx, from, text); ok {
+		return reply
+	}
 	// A bare hashtag is a search.
 	if strings.HasPrefix(text, "#") {
 		text = "/q " + text
 	}
 	if !strings.HasPrefix(text, "/") {
-		// Only commands get answers. This is what stops reply loops between bots.
 		return ""
 	}
 	cmd, rest := text, ""
@@ -91,7 +102,7 @@ func (s *Service) Handle(ctx context.Context, from From, text string) string {
 		cmd = cmd[:i]
 	}
 	cmd = strings.ToLower(cmd)
-	if i := strings.IndexByte(rest, '\n'); i >= 0 && cmd != "/add" {
+	if i := strings.IndexByte(rest, '\n'); i >= 0 && cmd != "/add" && cmd != "/create" {
 		rest = rest[:i]
 	}
 	admin := s.cfg.Admins[from.ID]
@@ -99,11 +110,16 @@ func (s *Service) Handle(ctx context.Context, from From, text string) string {
 	switch cmd {
 	case "/start", "/help":
 		return helpText
-	case "/add":
+	case "/create", "/add":
 		if role&store.RoleWrite == 0 {
 			return "not allowed to add links"
 		}
+		if strings.TrimSpace(rest) == "" {
+			return s.startConv(from)
+		}
 		return s.add(ctx, from, rest)
+	case "/cancel":
+		return "nothing to cancel"
 	case "/q":
 		if role&store.RoleRead == 0 {
 			return "not allowed to search"
@@ -122,12 +138,20 @@ func (s *Service) role(ctx context.Context, id int64) (int, error) {
 	if s.cfg.Admins[id] {
 		return store.RoleWrite | store.RoleRead, nil
 	}
-	return s.st.Role(ctx, id)
+	r, err := s.st.Role(ctx, id)
+	if err != nil || r&store.RoleBanned != 0 {
+		return 0, err
+	}
+	if r == 0 && s.cfg.Open {
+		return store.RoleWrite | store.RoleRead, nil
+	}
+	return r, nil
 }
 
 const helpText = `commands:
 #tag  or  /q #tag [kind:video,audio] [all] [cursor]
-/add #tag https://t.me/channel/123   (one per line, several lines allowed)
+/create   (I ask for the hashtag, then the link)
+/create #tag https://t.me/channel/123   (one message, several lines allowed)
 tags use a-z 0-9 _ ; * is a wildcard after at least 6 characters
 kinds: video audio voice document photo animation sticker text other`
 
@@ -139,8 +163,13 @@ func (s *Service) add(ctx context.Context, from From, body string) string {
 		}
 	}
 	if len(lines) == 0 {
-		return "usage: /add #tag https://t.me/channel/123"
+		return "usage: /create #tag https://t.me/channel/123"
 	}
+	return s.addLines(ctx, from, lines)
+}
+
+// addLines stores "#tag link" lines for a sender and reports what happened.
+func (s *Service) addLines(ctx context.Context, from From, lines []string) string {
 	now := s.cfg.Now()
 	granted := s.lim.take("w:"+strconv.FormatInt(from.ID, 10), len(lines), s.cfg.ItemsPerMin, now)
 
@@ -158,7 +187,7 @@ func (s *Service) add(ctx context.Context, from From, body string) string {
 			note(i, err.Error())
 			continue
 		}
-		res, err := s.st.Add(ctx, t, ref, from.ID, s.cfg.MaxPerTag, now)
+		res, err := s.st.Add(ctx, t, ref, from.ID, s.cfg.MaxPerTag, s.cfg.MaxPending, now)
 		if err != nil {
 			bad++
 			note(i, "storage error")
@@ -172,6 +201,9 @@ func (s *Service) add(ctx context.Context, from From, body string) string {
 		case store.Full:
 			full++
 			note(i, "tag is full")
+		case store.Busy:
+			full++
+			note(i, "too many links wait for a check, try later")
 		}
 	}
 	out := fmt.Sprintf("added %d, duplicate %d, rejected %d, full %d", added, dup, bad, full)
@@ -334,17 +366,17 @@ func (s *Service) admin(ctx context.Context, cmd, args string) string {
 		if err != nil {
 			return "error: bad id"
 		}
-		if err := s.st.SetRole(ctx, id, 0); err != nil {
+		if err := s.st.SetRole(ctx, id, store.RoleBanned); err != nil {
 			return "error: try again later"
 		}
 		if cmd == "/deny" {
-			return "removed"
+			return "banned"
 		}
 		n, err := s.st.DeleteBy(ctx, id)
 		if err != nil {
 			return "error: try again later"
 		}
-		return fmt.Sprintf("removed, %d links deleted", n)
+		return fmt.Sprintf("banned, %d links deleted", n)
 	}
 	return ""
 }

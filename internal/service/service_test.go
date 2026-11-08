@@ -259,7 +259,7 @@ func TestAdminCommands(t *testing.T) {
 	if got := r.say(admin, false, "/del #tm_m_603 https://t.me/chan1/3"); got != "not found" {
 		t.Errorf("del again: %q", got)
 	}
-	if got := r.say(admin, false, "/purge 77"); got != "removed, 2 links deleted" {
+	if got := r.say(admin, false, "/purge 77"); got != "banned, 2 links deleted" {
 		t.Errorf("purge: %q", got)
 	}
 	if got := r.say(77, true, "/add #tm_m_603 https://t.me/chan1/9"); got != "" {
@@ -286,5 +286,91 @@ func TestBotNameSuffixAndLength(t *testing.T) {
 	got := r.say(reader, false, "#tm_m_603")
 	if len(got) > maxReply+200 || !strings.Contains(got, "\nnext: /q #tm_m_603 ") {
 		t.Errorf("long reply: %d bytes, tail %q", len(got), got[len(got)-60:])
+	}
+}
+
+func TestOpenAccessAndBans(t *testing.T) {
+	r := newRig(t, func(c *Config) { c.Open = true })
+	// Anyone can add and search without being a member.
+	if got := r.say(nobody, true, "/create #tm_m_603 https://t.me/chan1/1"); !strings.HasPrefix(got, "added 1") {
+		t.Fatalf("open add: %q", got)
+	}
+	r.verify("video")
+	if got := r.say(nobody+1, false, "#tm_m_603"); !strings.HasPrefix(got, "https://t.me/chan1/1 video") {
+		t.Fatalf("open search: %q", got)
+	}
+	// Plain text is still ignored for strangers.
+	if got := r.say(nobody, true, "thanks"); got != "" {
+		t.Errorf("plain text answered: %q", got)
+	}
+	// Admin commands stay admin only.
+	if got := r.say(nobody, false, "/stats"); got != "" {
+		t.Errorf("stranger ran /stats: %q", got)
+	}
+	// A banned sender is silent even though the bot is open.
+	r.say(admin, false, "/deny 4")
+	if got := r.say(nobody, true, "#tm_m_603"); got != "" {
+		t.Errorf("banned sender answered: %q", got)
+	}
+	// Only the ban list differs from a member: allow lifts it.
+	r.say(admin, false, "/allow 4 both")
+	if got := r.say(nobody, true, "#tm_m_603"); got == "" {
+		t.Error("allowed sender still silent")
+	}
+}
+
+func TestPendingCap(t *testing.T) {
+	r := newRig(t, func(c *Config) { c.Open = true; c.MaxPending = 2; c.MaxPerTag = 100 })
+	got := r.say(nobody, true, "/create\n#tm_m_603 https://t.me/chan1/1\n#tm_m_603 https://t.me/chan1/2\n#tm_m_603 https://t.me/chan1/3")
+	if !strings.HasPrefix(got, "added 2, duplicate 0, rejected 0, full 1") || !strings.Contains(got, "wait for a check") {
+		t.Fatalf("got %q", got)
+	}
+	r.verify("video")
+	if got := r.say(nobody, true, "/create #tm_m_603 https://t.me/chan1/3"); !strings.HasPrefix(got, "added 1") {
+		t.Fatalf("after the check: %q", got)
+	}
+}
+
+func TestCreateFlow(t *testing.T) {
+	r := newRig(t, func(c *Config) { c.Open = true })
+	steps := []struct{ in, want string }{
+		{"/create", "send the hashtag"},
+		{"tm-bad", "error:"},
+		{"#Tm_TV_1_2_en", "now send the link"},
+		{"https://example.com/x/1", "error:"},
+		{"https://t.me/c/123/4", "private channel"},
+		{"https://t.me/Chan1/7", "added 1, duplicate 0"},
+		{"hello", ""},
+	}
+	for _, s := range steps {
+		got := r.say(nobody, false, s.in)
+		if s.want == "" && got != "" || !strings.Contains(got, s.want) {
+			t.Fatalf("%q gave %q, want %q", s.in, got, s.want)
+		}
+	}
+	r.verify("video")
+	if got := r.say(nobody, false, "#tm_tv_1_2_en"); !strings.HasPrefix(got, "https://t.me/chan1/7 video") {
+		t.Fatalf("stored link: %q", got)
+	}
+
+	// /cancel, another command, and a flow that runs out of time.
+	r.say(nobody, false, "/create")
+	if got := r.say(nobody, false, "/cancel"); got != "cancelled" {
+		t.Errorf("cancel: %q", got)
+	}
+	if got := r.say(nobody, false, "#tm_tv_1_2_en"); !strings.HasPrefix(got, "none") && !strings.HasPrefix(got, "https://") {
+		t.Errorf("after cancel the hashtag is a search: %q", got)
+	}
+	r.say(nobody, false, "/create")
+	if got := r.say(nobody, false, "/q #tm_tv_1_2_en"); !strings.HasPrefix(got, "https://") {
+		t.Errorf("a command ends the flow: %q", got)
+	}
+	if got := r.say(nobody, false, "tm_m_603"); got != "" {
+		t.Errorf("flow still open: %q", got)
+	}
+	r.say(nobody, false, "/create")
+	r.now = r.now.Add(6 * time.Minute)
+	if got := r.say(nobody, false, "tm_m_603"); got != "" {
+		t.Errorf("flow did not expire: %q", got)
 	}
 }

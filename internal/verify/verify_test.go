@@ -76,7 +76,7 @@ func TestWorker(t *testing.T) {
 	defer st.Close()
 	now := time.Unix(1_800_000_000, 0)
 	for i := int64(1); i <= 3; i++ {
-		st.Add(ctx, "tm_m_603", link.Ref{Chan: "chan1", Msg: i}, 1, 10, now)
+		st.Add(ctx, "tm_m_603", link.Ref{Chan: "chan1", Msg: i}, 1, 10, 0, now)
 	}
 	f := &fake{res: map[int64]error{2: ErrGone, 3: errors.New("network down")}}
 	w := &Worker{Store: st, Fetch: f, MaxTries: 2, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: func() time.Time { return now }}
