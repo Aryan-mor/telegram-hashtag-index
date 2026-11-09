@@ -1,4 +1,8 @@
-# telegram-hashtag-index
+<p align="center">
+  <img src=".github/logo.svg" alt="telegram-hashtag-index logo" width="128" height="128">
+</p>
+
+<h1 align="center">telegram-hashtag-index</h1>
 
 A Telegram bot that keeps links to public posts under hashtags, so a post can be found by its
 hashtag without joining the channel it lives in.
