@@ -37,8 +37,9 @@ func TestClassify(t *testing.T) {
 		{"audio by type", doc("audio/flac", 9, &tg.DocumentAttributeFilename{FileName: "x"}), store.Check{Kind: "audio", Size: 9, Mime: "audio/flac"}},
 		{"subtitle file stays a document", doc("application/x-subrip", 10, &tg.DocumentAttributeFilename{FileName: "a.srt"}), store.Check{Kind: "document", Size: 10, Mime: "application/x-subrip"}},
 		{"photo", &tg.Message{Media: &tg.MessageMediaPhoto{}}, store.Check{Kind: "photo"}},
-		{"text", &tg.Message{Message: "hello"}, store.Check{Kind: "text"}},
-		{"link preview", &tg.Message{Message: "see", Media: &tg.MessageMediaWebPage{}}, store.Check{Kind: "text"}},
+		{"text", &tg.Message{Message: "hello"}, store.Check{Kind: "text", Text: "hello"}},
+		{"link preview", &tg.Message{Message: "see", Media: &tg.MessageMediaWebPage{}}, store.Check{Kind: "text", Text: "see"}},
+		{"caption", &tg.Message{Message: "#tm_m_603", Media: &tg.MessageMediaPhoto{}}, store.Check{Kind: "photo", Text: "#tm_m_603"}},
 		{"poll", &tg.Message{Media: &tg.MessageMediaPoll{}}, store.Check{Kind: "other"}},
 	}
 	for _, c := range cases {
@@ -68,7 +69,33 @@ func (f *fake) Fetch(_ context.Context, ref link.Ref) (store.Check, error) {
 	if err := f.res[ref.Msg]; err != nil {
 		return store.Check{}, err
 	}
-	return store.Check{Kind: "video", Size: 9}, nil
+	return store.Check{Kind: "video", Size: 9, Text: "Film\n#tm_m_603 #tm_m"}, nil
+}
+
+func TestWorkerNeedsTagOnPost(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	now := time.Unix(1_800_000_000, 0)
+	ref := link.Ref{Chan: "chan1", Msg: 1}
+	for _, name := range []string{"tm_m_603", "tm_m", "tm_m_60"} {
+		st.Add(ctx, name, ref, 1, 10, 0, now)
+	}
+	w := &Worker{Store: st, Fetch: &fake{}, MaxTries: 2, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: func() time.Time { return now }}
+	for i := 0; i < 3; i++ {
+		l, _ := st.Pending(ctx, 1)
+		w.one(ctx, l[0], 0)
+	}
+	counts, _ := st.Counts(ctx)
+	if counts["verified"] != 2 || counts["dead"] != 1 {
+		t.Fatalf("counts: %v", counts)
+	}
+	if got, _, _ := st.Find(ctx, store.Query{Pattern: mustPattern(t, "tm_m_60"), Pending: true, Limit: 10}); len(got) != 0 {
+		t.Fatalf("tag missing from the post was kept: %+v", got)
+	}
 }
 
 func TestWorker(t *testing.T) {

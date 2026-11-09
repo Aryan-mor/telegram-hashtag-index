@@ -1,7 +1,8 @@
 // Package verify checks that a stored link opens and finds out what the post holds.
 //
 // The check is done with a signed-in Telegram user account, one post at a time, at a slow
-// steady pace. A post that exists is marked verified with its kind (video, audio, ...).
+// steady pace. A post that exists and shows the link's hashtag in its text or caption is
+// marked verified with its kind (video, audio, ...). A post without the hashtag is dead.
 package verify
 
 import (
@@ -18,6 +19,7 @@ import (
 
 	"github.com/Aryan-mor/telegram-hashtag-index/internal/link"
 	"github.com/Aryan-mor/telegram-hashtag-index/internal/store"
+	"github.com/Aryan-mor/telegram-hashtag-index/internal/tag"
 )
 
 // ErrGone means the post, the channel or the name does not exist (any more).
@@ -68,6 +70,9 @@ func (w *Worker) one(ctx context.Context, l store.Link, gap time.Duration) time.
 	chk, err := w.Fetch.Fetch(ctx, l.Ref())
 	now := w.Now()
 	switch {
+	case err == nil && !tag.InText(chk.Text, l.Tag):
+		err = w.Store.MarkDead(ctx, l.ID, now)
+		w.Log.Info("tag not on post", "id", l.ID, "tag", l.Tag)
 	case err == nil:
 		err = w.Store.MarkVerified(ctx, l.ID, chk, now)
 		w.Log.Info("verified", "id", l.ID, "kind", chk.Kind)
@@ -174,13 +179,22 @@ func (t *Telegram) channel(ctx context.Context, name string) (*tg.InputChannel, 
 	return ch, nil
 }
 
-// Classify tells what a message holds.
+// Classify tells what a message holds and keeps its text.
 func Classify(m tg.MessageClass) (store.Check, error) {
 	msg, ok := m.(*tg.Message)
 	if !ok {
 		// An empty slot or a service message such as "pinned".
 		return store.Check{}, ErrGone
 	}
+	c, err := classify(msg)
+	if err != nil {
+		return store.Check{}, err
+	}
+	c.Text = msg.Message
+	return c, nil
+}
+
+func classify(msg *tg.Message) (store.Check, error) {
 	switch media := msg.Media.(type) {
 	case nil, *tg.MessageMediaEmpty:
 		if strings.TrimSpace(msg.Message) == "" {

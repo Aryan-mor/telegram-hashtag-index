@@ -11,6 +11,8 @@ package tag
 import (
 	"errors"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 const (
@@ -94,6 +96,28 @@ func clean(s string, wild bool) (string, error) {
 		b[i] = c
 	}
 	return string(b), nil
+}
+
+// InText reports whether the normalized tag t appears as a hashtag in text. The hashtag
+// must end there: "#tm_m_6031" does not hold "tm_m_603". Case does not matter.
+func InText(text, t string) bool {
+	for i := 0; i < len(text); i++ {
+		if text[i] != '#' {
+			continue
+		}
+		j := i + 1
+		for j < len(text) {
+			r, n := utf8.DecodeRuneInString(text[j:])
+			if r != '_' && !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+				break
+			}
+			j += n
+		}
+		if strings.EqualFold(text[i+1:j], t) {
+			return true
+		}
+	}
+	return false
 }
 
 // collapse joins runs of "*" so "a**b" and "a*b" are the same pattern.

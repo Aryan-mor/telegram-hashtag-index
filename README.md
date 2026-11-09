@@ -18,6 +18,7 @@ Everything is a message to the bot. Only members get answers; everyone else gets
 | Message | Result |
 |---|---|
 | `/add #tag https://t.me/channel/123` | Stores the link. Several lines can follow in one message. |
+| `/add #tag1 #tag2 https://t.me/channel/123` | Stores the link under each hashtag (10 at most per line). |
 | `#tag` or `/q #tag` | Verified links for the tag, 30 per page, newest first. |
 | `/q #tag kind:video,audio` | Only these kinds. |
 | `/q #tag all` | Also links that are not verified yet (marked `unverified`). |
@@ -52,7 +53,9 @@ added), `/del #tag link`, `/recheck <kind>` (queue verified links of that kind f
 ## Verification
 
 A background worker takes pending links oldest first, 20 per minute (`VERIFY_PER_MIN`), and reads
-each post with a user account. The post must exist in a public channel. The worker records the
+each post with a user account. The post must exist in a public channel and show the link's
+hashtag in its text or caption (`#tm_m_6031` does not count for `#tm_m_603`). A link whose
+hashtag is not on the post is marked dead. The worker records the
 kind, size, duration and MIME type exactly as Telegram reports them. Links that cannot be read
 for good are marked dead and no longer returned. Temporary errors are retried and turn the link
 dead after 10 failures.

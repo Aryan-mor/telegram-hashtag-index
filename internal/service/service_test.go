@@ -143,6 +143,30 @@ func TestAddAndQuery(t *testing.T) {
 	}
 }
 
+func TestAddManyTags(t *testing.T) {
+	r := newRig(t, nil)
+	got := r.say(writer, true, "/add #tm_m_603 https://t.me/chan1/10 #TM_M #tm_m_603\nhttps://t.me/chan1/11 #tm_m")
+	if got != "added 3, duplicate 0, rejected 0, full 0" {
+		t.Fatalf("add: %q", got)
+	}
+	r.verify("video")
+	if got := r.say(reader, true, "#tm_m"); got != "https://t.me/chan1/11 video #tm_m\nhttps://t.me/chan1/10 video #tm_m" {
+		t.Fatalf("tm_m: %q", got)
+	}
+	if got := r.say(reader, true, "#tm_m_603"); got != "https://t.me/chan1/10 video #tm_m_603" {
+		t.Fatalf("tm_m_603: %q", got)
+	}
+	for in, want := range map[string]string{
+		"/add #tm_m https://t.me/chan1/1 https://t.me/chan1/2":       "expected",
+		"/add #tm_m #tm-x https://t.me/chan1/1":                      "a-z",
+		"/add #a #b #c #d #e #f #g #h #i #j #k https://t.me/chan1/1": "at most 10",
+	} {
+		if got := r.say(writer, true, in); !strings.Contains(got, "rejected 1") || !strings.Contains(got, want) {
+			t.Errorf("%q gave %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestPaging(t *testing.T) {
 	r := newRig(t, func(c *Config) { c.MaxPerTag = 10 })
 	var lines []string
@@ -336,10 +360,11 @@ func TestCreateFlow(t *testing.T) {
 	steps := []struct{ in, want string }{
 		{"/create", "send the hashtag"},
 		{"tm-bad", "error:"},
-		{"#Tm_TV_1_2_en", "now send the link"},
+		{"#tm_tv_1 #tm-bad", "error:"},
+		{"#Tm_TV_1_2_en #tm_tv_1", "now send the link"},
 		{"https://example.com/x/1", "error:"},
 		{"https://t.me/c/123/4", "private channel"},
-		{"https://t.me/Chan1/7", "added 1, duplicate 0"},
+		{"https://t.me/Chan1/7", "added 2, duplicate 0"},
 		{"hello", ""},
 	}
 	for _, s := range steps {

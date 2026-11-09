@@ -29,6 +29,27 @@ func TestNormalize(t *testing.T) {
 	}
 }
 
+func TestInText(t *testing.T) {
+	yes := []string{
+		"#tm_m_603",
+		"Film 2026\n#TM_M_603 #other",
+		"(#tm_m_603)",
+		"#tm_m_603@chan1",
+		"شبکه #tm_m_603.",
+	}
+	for _, s := range yes {
+		if !InText(s, "tm_m_603") {
+			t.Errorf("InText(%q) = false", s)
+		}
+	}
+	no := []string{"", "tm_m_603", "#tm_m_6031", "#tm_m_60", "#tm_m_603é", "# tm_m_603", "#xtm_m_603"}
+	for _, s := range no {
+		if InText(s, "tm_m_603") {
+			t.Errorf("InText(%q) = true", s)
+		}
+	}
+}
+
 func TestParsePattern(t *testing.T) {
 	p, err := ParsePattern("#tm_tv_322280_1_6*")
 	if err != nil || !p.Wild || p.Prefix != "tm_tv_322280_1_6" || p.Text != "tm_tv_322280_1_6*" {

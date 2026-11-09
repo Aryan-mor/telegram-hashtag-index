@@ -5,6 +5,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -150,8 +151,9 @@ func (s *Service) role(ctx context.Context, id int64) (int, error) {
 
 const helpText = `commands:
 #tag  or  /q #tag [kind:video,audio] [all] [cursor]
-/create   (I ask for the hashtag, then the link)
-/create #tag https://t.me/channel/123   (one message, several lines allowed)
+/create   (I ask for the hashtags, then the link)
+/create #tag1 #tag2 https://t.me/channel/123   (one message, several lines allowed)
+every hashtag must be visible on the linked post, or the link is rejected
 tags use a-z 0-9 _ ; * is a wildcard after at least 6 characters
 kinds: video audio voice document photo animation sticker text other`
 
@@ -181,29 +183,31 @@ func (s *Service) addLines(ctx context.Context, from From, lines []string) strin
 		}
 	}
 	for i, ln := range lines[:granted] {
-		t, ref, err := parseItem(ln)
+		tags, ref, err := parseItem(ln)
 		if err != nil {
 			bad++
 			note(i, err.Error())
 			continue
 		}
-		res, err := s.st.Add(ctx, t, ref, from.ID, s.cfg.MaxPerTag, s.cfg.MaxPending, now)
-		if err != nil {
-			bad++
-			note(i, "storage error")
-			continue
-		}
-		switch res {
-		case store.Added:
-			added++
-		case store.Duplicate:
-			dup++
-		case store.Full:
-			full++
-			note(i, "tag is full")
-		case store.Busy:
-			full++
-			note(i, "too many links wait for a check, try later")
+		for _, t := range tags {
+			res, err := s.st.Add(ctx, t, ref, from.ID, s.cfg.MaxPerTag, s.cfg.MaxPending, now)
+			if err != nil {
+				bad++
+				note(i, "storage error")
+				continue
+			}
+			switch res {
+			case store.Added:
+				added++
+			case store.Duplicate:
+				dup++
+			case store.Full:
+				full++
+				note(i, "#"+t+" is full")
+			case store.Busy:
+				full++
+				note(i, "too many links wait for a check, try later")
+			}
 		}
 	}
 	out := fmt.Sprintf("added %d, duplicate %d, rejected %d, full %d", added, dup, bad, full)
@@ -216,25 +220,41 @@ func (s *Service) addLines(ctx context.Context, from From, lines []string) strin
 	return out
 }
 
-// parseItem reads "#tag link". The two parts may come in either order.
-func parseItem(line string) (string, link.Ref, error) {
-	f := strings.Fields(line)
-	if len(f) != 2 {
-		return "", link.Ref{}, fmt.Errorf("expected: #tag link")
+// maxTagsPerLink is the most hashtags one line may give a link.
+const maxTagsPerLink = 10
+
+// parseItem reads "#tag [#tag ...] link": one or more hashtags and one link, in any order.
+// Repeated hashtags count once.
+func parseItem(line string) ([]string, link.Ref, error) {
+	var tags []string
+	var raw string
+	for _, f := range strings.Fields(line) {
+		if !strings.HasPrefix(f, "#") {
+			if raw != "" {
+				return nil, link.Ref{}, fmt.Errorf("expected: #tag [#tag ...] link")
+			}
+			raw = f
+			continue
+		}
+		t, err := tag.Normalize(f)
+		if err != nil {
+			return nil, link.Ref{}, err
+		}
+		if !slices.Contains(tags, t) {
+			tags = append(tags, t)
+		}
 	}
-	a, b := f[0], f[1]
-	if !strings.HasPrefix(a, "#") {
-		a, b = b, a
+	if len(tags) == 0 || raw == "" {
+		return nil, link.Ref{}, fmt.Errorf("expected: #tag [#tag ...] link")
 	}
-	t, err := tag.Normalize(a)
+	if len(tags) > maxTagsPerLink {
+		return nil, link.Ref{}, fmt.Errorf("at most %d hashtags per link", maxTagsPerLink)
+	}
+	ref, err := link.Parse(raw)
 	if err != nil {
-		return "", link.Ref{}, err
+		return nil, link.Ref{}, err
 	}
-	ref, err := link.Parse(b)
-	if err != nil {
-		return "", link.Ref{}, err
-	}
-	return t, ref, nil
+	return tags, ref, nil
 }
 
 func (s *Service) query(ctx context.Context, from From, args string) string {
@@ -339,11 +359,11 @@ func (s *Service) admin(ctx context.Context, cmd, args string) string {
 		if len(f) != 2 {
 			return "usage: /del #tag link"
 		}
-		t, ref, err := parseItem(f[0] + " " + f[1])
+		tags, ref, err := parseItem(f[0] + " " + f[1])
 		if err != nil {
 			return "error: " + err.Error()
 		}
-		ok, err := s.st.Delete(ctx, t, ref)
+		ok, err := s.st.Delete(ctx, tags[0], ref)
 		if err != nil {
 			return "error: try again later"
 		}

@@ -80,6 +80,8 @@ type Check struct {
 	Size     int64
 	Duration int64
 	Mime     string
+	// Text is the post text or caption. It is checked for the tag and not stored.
+	Text string
 }
 
 // Query selects links for a search.

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="telegram-hashtag-index logo">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3BB4EA"/>
+      <stop offset="1" stop-color="#1A86C2"/>
+    </linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="64" fill="url(#bg)"/>
+  <g stroke="#fff" stroke-width="9" stroke-linecap="round" fill="none">
+    <line x1="52" y1="28" x2="44" y2="84"/>
+    <line x1="74" y1="28" x2="66" y2="84"/>
+    <line x1="32" y1="46" x2="88" y2="46"/>
+    <line x1="28" y1="68" x2="84" y2="68"/>
+  </g>
+  <circle cx="92" cy="92" r="20" fill="#fff" stroke="#1E8FCB" stroke-width="4"/>
+  <path transform="translate(78.4 79.2) scale(1.1)" fill="#229ED9"
+        d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/>
+</svg>

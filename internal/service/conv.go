@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -10,7 +11,7 @@ import (
 	"github.com/Aryan-mor/telegram-hashtag-index/internal/tag"
 )
 
-// The guided /create flow asks for the hashtag, then for the link. A sender who gives
+// The guided /create flow asks for the hashtags, then for the link. A sender who gives
 // nothing for convTTL starts again. At most maxConvs flows run at once.
 const (
 	convTTL  = 5 * time.Minute
@@ -26,7 +27,8 @@ const (
 
 type conv struct {
 	step convStep
-	tag  string
+	// tags holds the normalized hashtags, "#a #b".
+	tags string
 	at   time.Time
 }
 
@@ -49,7 +51,7 @@ func (s *Service) startConv(from From) string {
 		}
 	}
 	s.convs[from.ID] = &conv{step: askTag, at: now}
-	return "send the hashtag, for example #tm_m_603 (send /cancel to stop)"
+	return "send the hashtags, for example #tm_m_603 #tm_m (send /cancel to stop)"
 }
 
 // continueConv handles a message from a sender who is in the guided flow. It returns
@@ -78,12 +80,19 @@ func (s *Service) continueConv(ctx context.Context, from From, text string) (str
 
 	switch c.step {
 	case askTag:
-		t, err := tag.Normalize(text)
-		if err != nil {
-			return "error: " + err.Error() + ". Send the hashtag again or /cancel", true
+		var tags []string
+		for _, f := range strings.Fields(text) {
+			t, err := tag.Normalize(f)
+			if err != nil {
+				return "error: " + err.Error() + ". Send the hashtags again or /cancel", true
+			}
+			tags = append(tags, "#"+t)
+		}
+		if len(tags) > maxTagsPerLink {
+			return fmt.Sprintf("error: at most %d hashtags per link. Send the hashtags again or /cancel", maxTagsPerLink), true
 		}
 		s.mu.Lock()
-		c.tag, c.step, c.at = t, askLink, now
+		c.tags, c.step, c.at = strings.Join(tags, " "), askLink, now
 		s.mu.Unlock()
 		return "now send the link, for example https://t.me/channel/123", true
 	default:
@@ -94,6 +103,6 @@ func (s *Service) continueConv(ctx context.Context, from From, text string) (str
 		s.mu.Lock()
 		delete(s.convs, from.ID)
 		s.mu.Unlock()
-		return s.addLines(ctx, from, []string{"#" + c.tag + " " + ref.String()}), true
+		return s.addLines(ctx, from, []string{c.tags + " " + ref.String()}), true
 	}
 }
