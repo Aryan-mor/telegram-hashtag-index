@@ -210,11 +210,12 @@ func (s *Store) Find(ctx context.Context, q Query) ([]Link, bool, error) {
 	}
 	var where []string
 	var args []any
+	// A plain tag is a prefix: #tm_tv_71663_3_14 also returns #tm_tv_71663_3_14_en_fa.
+	// A wildcard still has to match the whole pattern.
+	where = append(where, "tag >= ? AND tag < ?")
+	args = append(args, q.Pattern.Prefix, q.Pattern.UpperBound())
 	if q.Pattern.Wild {
-		where = append(where, "tag >= ? AND tag < ? AND tag GLOB ?")
-		args = append(args, q.Pattern.Prefix, q.Pattern.UpperBound(), q.Pattern.Text)
-	} else {
-		where = append(where, "tag = ?")
+		where = append(where, "tag GLOB ?")
 		args = append(args, q.Pattern.Text)
 	}
 	if q.Pending {

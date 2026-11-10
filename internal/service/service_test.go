@@ -127,8 +127,11 @@ func TestAddAndQuery(t *testing.T) {
 	if got := r.say(reader, true, "#tm_tv_5_1_2_en_fa"); got != "https://t.me/chan1/10 video #tm_tv_5_1_2_en_fa" {
 		t.Fatalf("exact: %q", got)
 	}
-	// A wildcard sees both tags, newest first.
+	// A shorter tag includes the longer one. No * needed. Newest first.
 	want := "https://t.me/chan1/11 video #tm_tv_5_1_2_en\nhttps://t.me/chan1/10 video #tm_tv_5_1_2_en_fa"
+	if got := r.say(reader, true, "#tm_tv_5_1_2_en"); got != want {
+		t.Fatalf("prefix: %q", got)
+	}
 	if got := r.say(reader, true, "/q #tm_tv_5_1_2*"); got != want {
 		t.Fatalf("wild: %q", got)
 	}
@@ -150,8 +153,11 @@ func TestAddManyTags(t *testing.T) {
 		t.Fatalf("add: %q", got)
 	}
 	r.verify("video")
-	if got := r.say(reader, true, "#tm_m"); got != "https://t.me/chan1/11 video #tm_m\nhttps://t.me/chan1/10 video #tm_m" {
+	if got := r.say(reader, true, "#tm_m"); got != "https://t.me/chan1/11 video #tm_m\nhttps://t.me/chan1/10 video #tm_m\nnext: /q #tm_m 2" {
 		t.Fatalf("tm_m: %q", got)
+	}
+	if got := r.say(reader, true, "/q #tm_m 2"); got != "https://t.me/chan1/10 video #tm_m_603" {
+		t.Fatalf("tm_m prefix: %q", got)
 	}
 	if got := r.say(reader, true, "#tm_m_603"); got != "https://t.me/chan1/10 video #tm_m_603" {
 		t.Fatalf("tm_m_603: %q", got)

@@ -154,7 +154,7 @@ const helpText = `commands:
 /create   (I ask for the hashtags, then the link)
 /create #tag1 #tag2 https://t.me/channel/123   (one message, several lines allowed)
 every hashtag must be visible on the linked post, or the link is rejected
-tags use a-z 0-9 _ ; * is a wildcard after at least 6 characters
+tags use a-z 0-9 _ ; a tag also matches longer tags that start with it ; * is a wildcard after at least 6 characters
 kinds: video audio voice document photo animation sticker text other`
 
 func (s *Service) add(ctx context.Context, from From, body string) string {

@@ -19,7 +19,7 @@ Everything is a message to the bot. Only members get answers; everyone else gets
 |---|---|
 | `/add #tag https://t.me/channel/123` | Stores the link. Several lines can follow in one message. |
 | `/add #tag1 #tag2 https://t.me/channel/123` | Stores the link under each hashtag (10 at most per line). |
-| `#tag` or `/q #tag` | Verified links for the tag, 30 per page, newest first. |
+| `#tag` or `/q #tag` | Verified links whose hashtag starts with that text, 30 per page, newest first. |
 | `/q #tag kind:video,audio` | Only these kinds. |
 | `/q #tag all` | Also links that are not verified yet (marked `unverified`). |
 | `/q #tag [options] 4812` | Next page. The reply ends with `next: ...`, copy that line. |

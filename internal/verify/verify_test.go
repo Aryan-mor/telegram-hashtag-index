@@ -93,8 +93,11 @@ func TestWorkerNeedsTagOnPost(t *testing.T) {
 	if counts["verified"] != 2 || counts["dead"] != 1 {
 		t.Fatalf("counts: %v", counts)
 	}
-	if got, _, _ := st.Find(ctx, store.Query{Pattern: mustPattern(t, "tm_m_60"), Pending: true, Limit: 10}); len(got) != 0 {
-		t.Fatalf("tag missing from the post was kept: %+v", got)
+	got, _, _ := st.Find(ctx, store.Query{Pattern: mustPattern(t, "tm_m_60"), Pending: true, Limit: 10})
+	for _, l := range got {
+		if l.Tag == "tm_m_60" {
+			t.Fatalf("tag missing from the post was kept: %+v", got)
+		}
 	}
 }
 
